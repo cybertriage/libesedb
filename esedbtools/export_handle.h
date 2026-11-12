@@ -218,6 +218,10 @@ int export_handle_export_long_record_value(
      log_handle_t *log_handle,
      libcerror_error_t **error );
 
+int export_handle_print_backup_catalog_report(
+     export_handle_t *export_handle,
+     libcerror_error_t **error );
+
 int export_handle_export_file(
      export_handle_t *export_handle,
      const system_character_t *export_table_name,

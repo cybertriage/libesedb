@@ -77,6 +77,14 @@ struct libesedb_internal_file
 	/* The backup catalog
 	 */
 	libesedb_catalog_t *backup_catalog;
+
+	/* The backup catalog status
+	 */
+	int backup_catalog_status;
+
+	/* The number of the backup catalog page that could not be read, 0 if none
+	 */
+	uint32_t backup_catalog_unreadable_page_number;
 };
 
 LIBESEDB_EXTERN \
@@ -165,6 +173,34 @@ LIBESEDB_EXTERN \
 int libesedb_file_get_number_of_tables(
      libesedb_file_t *file,
      int *number_of_tables,
+     libcerror_error_t **error );
+
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_status(
+     libesedb_file_t *file,
+     int *status,
+     uint32_t *unreadable_page_number,
+     libcerror_error_t **error );
+
+LIBESEDB_EXTERN \
+int libesedb_file_get_number_of_backup_catalog_only_tables(
+     libesedb_file_t *file,
+     int *number_of_tables,
+     libcerror_error_t **error );
+
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_only_table_utf8_name_size(
+     libesedb_file_t *file,
+     int table_index,
+     size_t *utf8_string_size,
+     libcerror_error_t **error );
+
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_only_table_utf8_name(
+     libesedb_file_t *file,
+     int table_index,
+     uint8_t *utf8_string,
+     size_t utf8_string_size,
      libcerror_error_t **error );
 
 LIBESEDB_EXTERN \

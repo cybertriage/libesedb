@@ -4091,6 +4091,180 @@ on_error:
 /* Exports the items in the file
  * Returns the 1 if successful, 0 if no items are available or -1 on error
  */
+/* Prints one line reporting a backup catalog that could not be read completely
+ * or that lists tables the catalog does not, so a caller can see what was not exported:
+ * Backup catalog: status=<complete|partial|unreadable> unreadable_page=<number>
+ *  tables_only_in_backup_catalog=<number> names=<name>,<name>,...
+ * Prints nothing when the backup catalog was read completely and matches the catalog
+ * Returns 1 if successful or -1 on error
+ */
+int export_handle_print_backup_catalog_report(
+     export_handle_t *export_handle,
+     libcerror_error_t **error )
+{
+	uint8_t *table_name           = NULL;
+	static char *function         = "export_handle_print_backup_catalog_report";
+	const char *status_string     = NULL;
+	size_t table_name_size        = 0;
+	uint32_t unreadable_page      = 0;
+	int number_of_tables          = 0;
+	int status                    = 0;
+	int table_index               = 0;
+
+	if( export_handle == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid export handle.",
+		 function );
+
+		return( -1 );
+	}
+	if( libesedb_file_get_backup_catalog_status(
+	     export_handle->input_file,
+	     &status,
+	     &unreadable_page,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve backup catalog status.",
+		 function );
+
+		return( -1 );
+	}
+	if( libesedb_file_get_number_of_backup_catalog_only_tables(
+	     export_handle->input_file,
+	     &number_of_tables,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve number of backup catalog only tables.",
+		 function );
+
+		return( -1 );
+	}
+	switch( status )
+	{
+		case LIBESEDB_BACKUP_CATALOG_STATUS_PARTIAL:
+			status_string = "partial";
+			break;
+
+		case LIBESEDB_BACKUP_CATALOG_STATUS_UNREADABLE:
+			status_string = "unreadable";
+			break;
+
+		case LIBESEDB_BACKUP_CATALOG_STATUS_COMPLETE:
+			if( number_of_tables == 0 )
+			{
+				return( 1 );
+			}
+			status_string = "complete";
+			break;
+
+		default:
+			return( 1 );
+	}
+	fprintf(
+	 export_handle->notify_stream,
+	 "Backup catalog: status=%s unreadable_page=%" PRIu32 " tables_only_in_backup_catalog=%d names=",
+	 status_string,
+	 unreadable_page,
+	 number_of_tables );
+
+	for( table_index = 0;
+	     table_index < number_of_tables;
+	     table_index++ )
+	{
+		if( libesedb_file_get_backup_catalog_only_table_utf8_name_size(
+		     export_handle->input_file,
+		     table_index,
+		     &table_name_size,
+		     error ) != 1 )
+		{
+			libcerror_error_set(
+			 error,
+			 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+			 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+			 "%s: unable to retrieve size of backup catalog only table name: %d.",
+			 function,
+			 table_index );
+
+			goto on_error;
+		}
+		if( ( table_name_size == 0 )
+		 || ( table_name_size > (size_t) MEMORY_MAXIMUM_ALLOCATION_SIZE ) )
+		{
+			continue;
+		}
+		table_name = (uint8_t *) memory_allocate(
+		                          sizeof( uint8_t ) * table_name_size );
+
+		if( table_name == NULL )
+		{
+			libcerror_error_set(
+			 error,
+			 LIBCERROR_ERROR_DOMAIN_MEMORY,
+			 LIBCERROR_MEMORY_ERROR_INSUFFICIENT,
+			 "%s: unable to create table name.",
+			 function );
+
+			goto on_error;
+		}
+		if( libesedb_file_get_backup_catalog_only_table_utf8_name(
+		     export_handle->input_file,
+		     table_index,
+		     table_name,
+		     table_name_size,
+		     error ) != 1 )
+		{
+			libcerror_error_set(
+			 error,
+			 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+			 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+			 "%s: unable to retrieve backup catalog only table name: %d.",
+			 function,
+			 table_index );
+
+			goto on_error;
+		}
+		fprintf(
+		 export_handle->notify_stream,
+		 "%s%s",
+		 ( table_index > 0 ) ? "," : "",
+		 (char *) table_name );
+
+		memory_free(
+		 table_name );
+
+		table_name = NULL;
+	}
+	fprintf(
+	 export_handle->notify_stream,
+	 "\n" );
+
+	return( 1 );
+
+on_error:
+	fprintf(
+	 export_handle->notify_stream,
+	 "\n" );
+
+	if( table_name != NULL )
+	{
+		memory_free(
+		 table_name );
+	}
+	return( -1 );
+}
+
 int export_handle_export_file(
      export_handle_t *export_handle,
      const system_character_t *export_table_name,
@@ -4134,6 +4308,17 @@ int export_handle_export_file(
 		 function );
 
 		return( -1 );
+	}
+	/* Reporting is best effort: a failure is logged and does not stop the export
+	 */
+	if( export_handle_print_backup_catalog_report(
+	     export_handle,
+	     error ) != 1 )
+	{
+		libcnotify_print_error_backtrace(
+		 *error );
+		libcerror_error_free(
+		 error );
 	}
 	if( libesedb_file_get_number_of_tables(
 	     export_handle->input_file,

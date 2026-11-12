@@ -86,6 +86,12 @@ int libesedb_catalog_read_file_io_handle(
      libbfio_handle_t *file_io_handle,
      libcerror_error_t **error );
 
+int libesedb_catalog_read_file_io_handle_partial(
+     libesedb_catalog_t *catalog,
+     libbfio_handle_t *file_io_handle,
+     uint32_t *unreadable_page_number,
+     libcerror_error_t **error );
+
 int libesedb_catalog_get_number_of_table_definitions(
      libesedb_catalog_t *catalog,
      int *number_of_table_definitions,

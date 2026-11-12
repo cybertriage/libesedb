@@ -831,6 +831,9 @@ int libesedb_file_close(
 
 		result = -1;
 	}
+	internal_file->backup_catalog_status                 = LIBESEDB_BACKUP_CATALOG_STATUS_NOT_READ;
+	internal_file->backup_catalog_unreadable_page_number = 0;
+
 	return( result );
 }
 
@@ -1372,21 +1375,45 @@ int libesedb_file_open_read(
 
 			goto on_error;
 		}
-		if( libesedb_catalog_read_file_io_handle(
-		     internal_file->backup_catalog,
-		     file_io_handle,
-		     error ) != 1 )
-		{
-			libcerror_error_set(
-			 error,
-			 LIBCERROR_ERROR_DOMAIN_IO,
-			 LIBCERROR_IO_ERROR_READ_FAILED,
-			 "%s: unable to read backup catalog.",
-			 function );
+		/* The backup catalog is only reported on, never used to read tables,
+		 * so a backup catalog that cannot be read does not fail the open.
+		 */
+		result = libesedb_catalog_read_file_io_handle_partial(
+		          internal_file->backup_catalog,
+		          file_io_handle,
+		          &( internal_file->backup_catalog_unreadable_page_number ),
+		          error );
 
-			goto on_error;
+		if( result == 1 )
+		{
+			internal_file->backup_catalog_status = LIBESEDB_BACKUP_CATALOG_STATUS_COMPLETE;
 		}
-/* TODO compare contents of catalogs ? */
+		else if( result == 0 )
+		{
+			internal_file->backup_catalog_status = LIBESEDB_BACKUP_CATALOG_STATUS_PARTIAL;
+		}
+		else
+		{
+#if defined( HAVE_DEBUG_OUTPUT )
+			if( libcnotify_verbose != 0 )
+			{
+				if( ( error != NULL )
+				 && ( *error != NULL ) )
+				{
+					libcnotify_print_error_backtrace(
+					 *error );
+				}
+			}
+#endif
+			libcerror_error_free(
+			 error );
+
+			libesedb_catalog_free(
+			 &( internal_file->backup_catalog ),
+			 NULL );
+
+			internal_file->backup_catalog_status = LIBESEDB_BACKUP_CATALOG_STATUS_UNREADABLE;
+		}
 	}
 	internal_file->io_handle->abort = 0;
 
@@ -1770,6 +1797,344 @@ int libesedb_file_get_number_of_tables(
 
 			return( -1 );
 		}
+	}
+	return( 1 );
+}
+
+/* Retrieves the status of the backup catalog
+ * The status is a LIBESEDB_BACKUP_CATALOG_STATUS value. When the status is
+ * LIBESEDB_BACKUP_CATALOG_STATUS_PARTIAL, unreadable_page_number holds the
+ * number of the page at which reading the backup catalog stopped
+ * Returns 1 if successful or -1 on error
+ */
+int libesedb_file_get_backup_catalog_status(
+     libesedb_file_t *file,
+     int *status,
+     uint32_t *unreadable_page_number,
+     libcerror_error_t **error )
+{
+	libesedb_internal_file_t *internal_file = NULL;
+	static char *function                   = "libesedb_file_get_backup_catalog_status";
+
+	if( file == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid file.",
+		 function );
+
+		return( -1 );
+	}
+	internal_file = (libesedb_internal_file_t *) file;
+
+	if( status == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid status.",
+		 function );
+
+		return( -1 );
+	}
+	if( unreadable_page_number == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid unreadable page number.",
+		 function );
+
+		return( -1 );
+	}
+	*status                 = internal_file->backup_catalog_status;
+	*unreadable_page_number = internal_file->backup_catalog_unreadable_page_number;
+
+	return( 1 );
+}
+
+/* Walks the table definitions listed in the backup catalog but not in the catalog
+ * Counts them in number_of_tables; when table_definition is not NULL, stops at
+ * the one with index table_index and returns it
+ * Returns 1 if successful, 0 if table_index was not found or -1 on error
+ */
+static int libesedb_internal_file_get_backup_catalog_only_table_definition(
+            libesedb_internal_file_t *internal_file,
+            int table_index,
+            int *number_of_tables,
+            libesedb_table_definition_t **table_definition,
+            libcerror_error_t **error )
+{
+	libesedb_table_definition_t *backup_table_definition  = NULL;
+	libesedb_table_definition_t *catalog_table_definition = NULL;
+	static char *function                                 = "libesedb_internal_file_get_backup_catalog_only_table_definition";
+	int entry_index                                       = 0;
+	int number_of_entries                                 = 0;
+	int result                                            = 0;
+
+	*number_of_tables = 0;
+
+	if( ( internal_file->backup_catalog == NULL )
+	 || ( internal_file->catalog == NULL ) )
+	{
+		return( table_definition == NULL ? 1 : 0 );
+	}
+	if( libesedb_catalog_get_number_of_table_definitions(
+	     internal_file->backup_catalog,
+	     &number_of_entries,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve number of backup catalog table definitions.",
+		 function );
+
+		return( -1 );
+	}
+	for( entry_index = 0;
+	     entry_index < number_of_entries;
+	     entry_index++ )
+	{
+		if( libesedb_catalog_get_table_definition_by_index(
+		     internal_file->backup_catalog,
+		     entry_index,
+		     &backup_table_definition,
+		     error ) != 1 )
+		{
+			libcerror_error_set(
+			 error,
+			 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+			 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+			 "%s: unable to retrieve backup catalog table definition: %d.",
+			 function,
+			 entry_index );
+
+			return( -1 );
+		}
+		if( ( backup_table_definition == NULL )
+		 || ( backup_table_definition->table_catalog_definition == NULL )
+		 || ( backup_table_definition->table_catalog_definition->name == NULL )
+		 || ( backup_table_definition->table_catalog_definition->name_size == 0 ) )
+		{
+			continue;
+		}
+		result = libesedb_catalog_get_table_definition_by_name(
+		          internal_file->catalog,
+		          backup_table_definition->table_catalog_definition->name,
+		          backup_table_definition->table_catalog_definition->name_size,
+		          &catalog_table_definition,
+		          error );
+
+		if( result == -1 )
+		{
+			libcerror_error_set(
+			 error,
+			 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+			 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+			 "%s: unable to look up backup catalog table definition: %d in catalog.",
+			 function,
+			 entry_index );
+
+			return( -1 );
+		}
+		else if( result == 1 )
+		{
+			continue;
+		}
+		if( ( table_definition != NULL )
+		 && ( *number_of_tables == table_index ) )
+		{
+			*table_definition = backup_table_definition;
+
+			return( 1 );
+		}
+		*number_of_tables += 1;
+	}
+	return( table_definition == NULL ? 1 : 0 );
+}
+
+/* Retrieves the number of tables listed in the backup catalog but not in the catalog
+ * Only the part of the backup catalog that could be read is compared
+ * Returns 1 if successful or -1 on error
+ */
+int libesedb_file_get_number_of_backup_catalog_only_tables(
+     libesedb_file_t *file,
+     int *number_of_tables,
+     libcerror_error_t **error )
+{
+	static char *function = "libesedb_file_get_number_of_backup_catalog_only_tables";
+
+	if( file == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid file.",
+		 function );
+
+		return( -1 );
+	}
+	if( number_of_tables == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid number of tables.",
+		 function );
+
+		return( -1 );
+	}
+	if( libesedb_internal_file_get_backup_catalog_only_table_definition(
+	     (libesedb_internal_file_t *) file,
+	     0,
+	     number_of_tables,
+	     NULL,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to count backup catalog only tables.",
+		 function );
+
+		return( -1 );
+	}
+	return( 1 );
+}
+
+/* Retrieves the size of the UTF-8 encoded name of a table listed in the backup catalog but not in the catalog
+ * The returned size includes the end of string character
+ * Returns 1 if successful or -1 on error
+ */
+int libesedb_file_get_backup_catalog_only_table_utf8_name_size(
+     libesedb_file_t *file,
+     int table_index,
+     size_t *utf8_string_size,
+     libcerror_error_t **error )
+{
+	libesedb_internal_file_t *internal_file       = NULL;
+	libesedb_table_definition_t *table_definition = NULL;
+	static char *function                         = "libesedb_file_get_backup_catalog_only_table_utf8_name_size";
+	int number_of_tables                          = 0;
+
+	if( file == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid file.",
+		 function );
+
+		return( -1 );
+	}
+	internal_file = (libesedb_internal_file_t *) file;
+
+	if( libesedb_internal_file_get_backup_catalog_only_table_definition(
+	     internal_file,
+	     table_index,
+	     &number_of_tables,
+	     &table_definition,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve backup catalog only table: %d.",
+		 function,
+		 table_index );
+
+		return( -1 );
+	}
+	if( libesedb_catalog_definition_get_utf8_name_size(
+	     table_definition->table_catalog_definition,
+	     utf8_string_size,
+	     internal_file->io_handle->ascii_codepage,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve UTF-8 string size.",
+		 function );
+
+		return( -1 );
+	}
+	return( 1 );
+}
+
+/* Retrieves the UTF-8 encoded name of a table listed in the backup catalog but not in the catalog
+ * The size should include the end of string character
+ * Returns 1 if successful or -1 on error
+ */
+int libesedb_file_get_backup_catalog_only_table_utf8_name(
+     libesedb_file_t *file,
+     int table_index,
+     uint8_t *utf8_string,
+     size_t utf8_string_size,
+     libcerror_error_t **error )
+{
+	libesedb_internal_file_t *internal_file       = NULL;
+	libesedb_table_definition_t *table_definition = NULL;
+	static char *function                         = "libesedb_file_get_backup_catalog_only_table_utf8_name";
+	int number_of_tables                          = 0;
+
+	if( file == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid file.",
+		 function );
+
+		return( -1 );
+	}
+	internal_file = (libesedb_internal_file_t *) file;
+
+	if( libesedb_internal_file_get_backup_catalog_only_table_definition(
+	     internal_file,
+	     table_index,
+	     &number_of_tables,
+	     &table_definition,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve backup catalog only table: %d.",
+		 function,
+		 table_index );
+
+		return( -1 );
+	}
+	if( libesedb_catalog_definition_get_utf8_name(
+	     table_definition->table_catalog_definition,
+	     utf8_string,
+	     utf8_string_size,
+	     internal_file->io_handle->ascii_codepage,
+	     error ) != 1 )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_RUNTIME,
+		 LIBCERROR_RUNTIME_ERROR_GET_FAILED,
+		 "%s: unable to retrieve UTF-8 string.",
+		 function );
+
+		return( -1 );
 	}
 	return( 1 );
 }

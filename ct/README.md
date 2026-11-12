@@ -13,8 +13,20 @@ Work happens on the `ct` branch. `main` tracks upstream
   `synclibs.sh` and `synclibs.ps1` check out those versions, not the latest
   tags. `libfcache` has no tags, so it is pinned by commit.
 - `.github/workflows/ct_release.yml` builds the binaries Cyber Triage ships.
+- A backup catalog that cannot be read no longer fails opening the file. It
+  is read as far as it is readable and only reported on: tables are still
+  read from the catalog alone. `libesedb_file_get_backup_catalog_status` and
+  the `libesedb_file_get_*backup_catalog_only_table*` functions report it,
+  and `esedbexport` prints one line when the backup catalog is partial,
+  unreadable or lists tables the catalog does not:
 
-The library and the tools are upstream's, unchanged.
+  ```
+  Backup catalog: status=partial unreadable_page=62 tables_only_in_backup_catalog=2 names=Favorites,ReadingList
+  ```
+
+  Cyber Triage reads that line. Keep its format.
+
+Everything else in the library and the tools is upstream's, unchanged.
 
 ## Getting the binaries
 

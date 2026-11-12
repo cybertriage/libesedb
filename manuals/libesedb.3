@@ -216,6 +216,42 @@ File functions
 .fi
 .nf
 .Ft int
+.Fo libesedb_file_get_backup_catalog_status
+.Fa "libesedb_file_t *file"
+.Fa "int *status"
+.Fa "uint32_t *unreadable_page_number"
+.Fa "libesedb_error_t **error"
+.Fc
+.fi
+.nf
+.Ft int
+.Fo libesedb_file_get_number_of_backup_catalog_only_tables
+.Fa "libesedb_file_t *file"
+.Fa "int *number_of_tables"
+.Fa "libesedb_error_t **error"
+.Fc
+.fi
+.nf
+.Ft int
+.Fo libesedb_file_get_backup_catalog_only_table_utf8_name_size
+.Fa "libesedb_file_t *file"
+.Fa "int table_index"
+.Fa "size_t *utf8_string_size"
+.Fa "libesedb_error_t **error"
+.Fc
+.fi
+.nf
+.Ft int
+.Fo libesedb_file_get_backup_catalog_only_table_utf8_name
+.Fa "libesedb_file_t *file"
+.Fa "int table_index"
+.Fa "uint8_t *utf8_string"
+.Fa "size_t utf8_string_size"
+.Fa "libesedb_error_t **error"
+.Fc
+.fi
+.nf
+.Ft int
 .Fo libesedb_file_get_table
 .Fa "libesedb_file_t *file"
 .Fa "int table_entry"

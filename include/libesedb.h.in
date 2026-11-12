@@ -316,6 +316,54 @@ int libesedb_file_get_number_of_tables(
      int *number_of_tables,
      libesedb_error_t **error );
 
+/* Retrieves the status of the backup catalog
+ * The status is a LIBESEDB_BACKUP_CATALOG_STATUS value. A backup catalog that
+ * cannot be read completely does not fail the open; when the status is
+ * LIBESEDB_BACKUP_CATALOG_STATUS_PARTIAL, unreadable_page_number holds the
+ * number of the page at which reading the backup catalog stopped
+ * Returns 1 if successful or -1 on error
+ */
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_status(
+     libesedb_file_t *file,
+     int *status,
+     uint32_t *unreadable_page_number,
+     libesedb_error_t **error );
+
+/* Retrieves the number of tables listed in the backup catalog but not in the catalog
+ * Only the part of the backup catalog that could be read is compared.
+ * These tables are reported only; they cannot be retrieved with libesedb_file_get_table
+ * Returns 1 if successful or -1 on error
+ */
+LIBESEDB_EXTERN \
+int libesedb_file_get_number_of_backup_catalog_only_tables(
+     libesedb_file_t *file,
+     int *number_of_tables,
+     libesedb_error_t **error );
+
+/* Retrieves the size of the UTF-8 encoded name of a table listed in the backup catalog but not in the catalog
+ * The returned size includes the end of string character
+ * Returns 1 if successful or -1 on error
+ */
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_only_table_utf8_name_size(
+     libesedb_file_t *file,
+     int table_index,
+     size_t *utf8_string_size,
+     libesedb_error_t **error );
+
+/* Retrieves the UTF-8 encoded name of a table listed in the backup catalog but not in the catalog
+ * The size should include the end of string character
+ * Returns 1 if successful or -1 on error
+ */
+LIBESEDB_EXTERN \
+int libesedb_file_get_backup_catalog_only_table_utf8_name(
+     libesedb_file_t *file,
+     int table_index,
+     uint8_t *utf8_string,
+     size_t utf8_string_size,
+     libesedb_error_t **error );
+
 /* Retrieves the table for the specific entry
  * Returns 1 if successful or -1 on error
  */

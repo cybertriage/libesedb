@@ -731,17 +731,20 @@ on_error:
 	return( -1 );
 }
 
-/* Reads the catalog
- * Returns 1 if successful or -1 on error
+/* Reads the catalog leaf pages
+ * When unreadable_page_number is not NULL a page that cannot be read stops the read:
+ * the table definitions read before it are kept and its page number is returned
+ * Returns 1 if successful, 0 if the read stopped at an unreadable page or -1 on error
  */
-int libesedb_catalog_read_file_io_handle(
-     libesedb_catalog_t *catalog,
-     libbfio_handle_t *file_io_handle,
-     libcerror_error_t **error )
+static int libesedb_catalog_read_leaf_pages(
+            libesedb_catalog_t *catalog,
+            libbfio_handle_t *file_io_handle,
+            uint32_t *unreadable_page_number,
+            libcerror_error_t **error )
 {
 	libesedb_page_t *page                         = NULL;
 	libesedb_table_definition_t *table_definition = NULL;
-	static char *function                         = "libesedb_catalog_read_file_io_handle";
+	static char *function                         = "libesedb_catalog_read_leaf_pages";
 	off64_t page_offset                           = 0;
 	uint32_t leaf_page_number                     = 0;
 
@@ -812,7 +815,7 @@ int libesedb_catalog_read_file_io_handle(
 			 function,
 			 leaf_page_number );
 
-			return( -1 );
+			goto on_page_error;
 		}
 #if ( SIZEOF_INT <= 4 )
 		if( leaf_page_number > (uint32_t) INT_MAX )
@@ -827,7 +830,7 @@ int libesedb_catalog_read_file_io_handle(
 			 "%s: invalid leaf page number value out of bounds.",
 			 function );
 
-			return( -1 );
+			goto on_page_error;
 		}
 		if( libfdata_vector_get_element_value_by_index(
 		     catalog->page_tree->pages_vector,
@@ -846,7 +849,7 @@ int libesedb_catalog_read_file_io_handle(
 			 function,
 			 leaf_page_number );
 
-			return( -1 );
+			goto on_page_error;
 		}
 		if( libesedb_catalog_read_values_from_leaf_page(
 		     catalog,
@@ -862,7 +865,7 @@ int libesedb_catalog_read_file_io_handle(
 			 function,
 			 leaf_page_number );
 
-			return( -1 );
+			goto on_page_error;
 		}
 		if( libesedb_page_get_next_page_number(
 		     page,
@@ -877,10 +880,80 @@ int libesedb_catalog_read_file_io_handle(
 			 function,
 			 leaf_page_number );
 
-			return( -1 );
+			goto on_page_error;
 		}
 	}
 	return( 1 );
+
+on_page_error:
+	if( unreadable_page_number == NULL )
+	{
+		return( -1 );
+	}
+#if defined( HAVE_DEBUG_OUTPUT )
+	if( libcnotify_verbose != 0 )
+	{
+		if( ( error != NULL )
+		 && ( *error != NULL ) )
+		{
+			libcnotify_print_error_backtrace(
+			 *error );
+		}
+	}
+#endif
+	libcerror_error_free(
+	 error );
+
+	*unreadable_page_number = leaf_page_number;
+
+	return( 0 );
+}
+
+/* Reads the catalog
+ * Returns 1 if successful or -1 on error
+ */
+int libesedb_catalog_read_file_io_handle(
+     libesedb_catalog_t *catalog,
+     libbfio_handle_t *file_io_handle,
+     libcerror_error_t **error )
+{
+	return( libesedb_catalog_read_leaf_pages(
+	         catalog,
+	         file_io_handle,
+	         NULL,
+	         error ) );
+}
+
+/* Reads the catalog, keeping the table definitions read before a page that cannot be read
+ * Returns 1 if the whole catalog was read, 0 if the read stopped at an unreadable page
+ * (its number is in unreadable_page_number) or -1 on error
+ */
+int libesedb_catalog_read_file_io_handle_partial(
+     libesedb_catalog_t *catalog,
+     libbfio_handle_t *file_io_handle,
+     uint32_t *unreadable_page_number,
+     libcerror_error_t **error )
+{
+	static char *function = "libesedb_catalog_read_file_io_handle_partial";
+
+	if( unreadable_page_number == NULL )
+	{
+		libcerror_error_set(
+		 error,
+		 LIBCERROR_ERROR_DOMAIN_ARGUMENTS,
+		 LIBCERROR_ARGUMENT_ERROR_INVALID_VALUE,
+		 "%s: invalid unreadable page number.",
+		 function );
+
+		return( -1 );
+	}
+	*unreadable_page_number = 0;
+
+	return( libesedb_catalog_read_leaf_pages(
+	         catalog,
+	         file_io_handle,
+	         unreadable_page_number,
+	         error ) );
 }
 
 /* Retrieves the number of table definitions
